@@ -1,0 +1,186 @@
+{
+  "theme": "LIGHT",
+  "archetype": "1 (Organic & Earthy - Adapted to Food Delivery)",
+  "brand": {
+    "name": "Pedilo",
+    "slogan": "menos vueltas, más pedidos",
+    "vibe": "Modern, fast, appetizing, accessible, mobile-first"
+  },
+  "colors": {
+    "primary": {
+      "DEFAULT": "#E53935",
+      "foreground": "#FFFFFF",
+      "hover": "#C62828"
+    },
+    "secondary": {
+      "DEFAULT": "#FF7043",
+      "foreground": "#FFFFFF",
+      "hover": "#F4511E"
+    },
+    "background": {
+      "customer": "#FFFFFF",
+      "admin": "#F9FAFB"
+    },
+    "surface": {
+      "DEFAULT": "#FFFFFF",
+      "muted": "#F3F4F6",
+      "card": "#FFFFFF"
+    },
+    "text": {
+      "primary": "#111827",
+      "secondary": "#4B5563",
+      "muted": "#9CA3AF"
+    },
+    "border": {
+      "DEFAULT": "#E5E7EB",
+      "focus": "#E53935"
+    },
+    "status": {
+      "success": "#10B981",
+      "warning": "#F59E0B",
+      "error": "#EF4444"
+    }
+  },
+  "typography": {
+    "headings": {
+      "family": "Outfit, sans-serif",
+      "weights": ["600", "700", "800"],
+      "tracking": "tracking-tight"
+    },
+    "body": {
+      "family": "Figtree, sans-serif",
+      "weights": ["400", "500"]
+    },
+    "sizes": {
+      "h1": "text-4xl sm:text-5xl",
+      "h2": "text-2xl sm:text-3xl",
+      "h3": "text-xl sm:text-2xl",
+      "h4": "text-lg",
+      "body": "text-base",
+      "small": "text-sm",
+      "tiny": "text-xs uppercase tracking-widest"
+    }
+  },
+  "spacing_and_layout": {
+    "customer_app": {
+      "container": "w-full max-w-md mx-auto min-h-screen bg-white shadow-xl relative pb-24",
+      "section_padding": "py-6 px-4",
+      "gap": "gap-4",
+      "card_radius": "rounded-2xl",
+      "button_radius": "rounded-full",
+      "pills": "rounded-full px-4 py-2 text-sm font-medium transition-all"
+    },
+    "admin_panel": {
+      "container": "w-full min-h-screen bg-gray-50",
+      "grid": "grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-6",
+      "card_padding": "p-6",
+      "card_radius": "rounded-xl",
+      "button_radius": "rounded-lg"
+    }
+  },
+  "components": {
+    "customer": {
+      "header": {
+        "style": "sticky top-0 z-50 bg-white/90 backdrop-blur-xl border-b border-gray-100 px-4 py-4 flex flex-col justify-center items-center shadow-sm",
+        "title": "text-2xl font-headings font-bold text-primary",
+        "subtitle": "text-xs text-text-secondary font-medium mt-1"
+      },
+      "category_nav": {
+        "style": "flex overflow-x-auto gap-3 py-4 px-4 scrollbar-hide no-scrollbar sticky top-[72px] bg-white z-40 border-b border-gray-50",
+        "item_active": "bg-primary text-white shadow-md shadow-primary/20",
+        "item_inactive": "bg-surface-muted text-text-secondary hover:bg-gray-200"
+      },
+      "product_card": {
+        "layout": "flex gap-4 p-4 border border-border rounded-2xl mb-4 bg-white active:bg-gray-50 transition-colors",
+        "image": "w-24 h-24 rounded-xl object-cover shadow-sm",
+        "content": "flex-1 flex flex-col justify-between",
+        "title": "text-lg font-headings font-bold text-text-primary leading-tight",
+        "description": "text-sm text-text-secondary line-clamp-2 mt-1",
+        "price_row": "flex justify-between items-center mt-3",
+        "price": "text-lg font-bold text-text-primary",
+        "add_button": "h-8 w-8 rounded-full bg-primary/10 text-primary flex items-center justify-center font-bold text-xl"
+      },
+      "combo_card": {
+        "layout": "relative overflow-hidden p-5 border-2 border-secondary/20 rounded-2xl mb-6 bg-gradient-to-br from-white to-secondary/5",
+        "badge": "absolute top-0 right-0 bg-secondary text-white text-xs font-bold px-3 py-1 rounded-bl-xl",
+        "title": "text-xl font-headings font-bold text-secondary mb-2"
+      },
+      "floating_cart": {
+        "wrapper": "fixed bottom-0 left-0 right-0 p-4 z-50 flex justify-center pointer-events-none",
+        "inner": "pointer-events-auto w-full max-w-md",
+        "button": "w-full bg-primary text-white rounded-full py-4 px-6 flex justify-between items-center shadow-[0_8px_32px_rgba(229,57,53,0.3)] hover:bg-primary-hover active:scale-[0.98] transition-all",
+        "amount_badge": "bg-white text-primary text-sm font-bold h-6 min-w-[24px] px-2 rounded-full flex items-center justify-center",
+        "text": "font-headings font-bold text-lg",
+        "total": "font-bold text-lg"
+      },
+      "customization_drawer": {
+        "style": "bg-white rounded-t-3xl p-6",
+        "option_row": "flex justify-between items-center py-3 border-b border-gray-100 last:border-0",
+        "checkbox": "text-primary focus:ring-primary rounded"
+      }
+    },
+    "admin": {
+      "sidebar": "w-64 bg-white border-r border-gray-200 h-screen fixed hidden md:flex flex-col",
+      "header": "h-16 border-b border-gray-200 bg-white flex items-center justify-between px-6",
+      "card": "bg-white border border-gray-200 shadow-sm hover:shadow-md transition-shadow",
+      "table": "w-full text-left text-sm",
+      "table_th": "text-xs font-medium text-gray-500 uppercase tracking-wider py-3 px-4 border-b border-gray-200 bg-gray-50",
+      "table_td": "py-4 px-4 border-b border-gray-100 text-gray-800"
+    }
+  },
+  "interactions": {
+    "hover": "hover:-translate-y-0.5 transition-transform duration-200",
+    "active": "active:scale-95 transition-transform duration-100",
+    "focus": "focus:outline-none focus:ring-2 focus:ring-primary/50 focus:ring-offset-2",
+    "page_transition": "animate-in fade-in slide-in-from-bottom-4 duration-300 ease-out"
+  },
+  "icons_library": "lucide-react",
+  "media": {
+    "images": [
+      {
+        "category": "Products - Empanadas",
+        "url": "https://images.pexels.com/photos/37025257/pexels-photo-37025257.jpeg",
+        "description": "Colombian/Argentinian style empanadas"
+      },
+      {
+        "category": "Products - Chicken",
+        "url": "https://images.pexels.com/photos/31023374/pexels-photo-31023374.jpeg",
+        "description": "Roasted chicken"
+      },
+      {
+        "category": "Products - Burger",
+        "url": "https://images.pexels.com/photos/13893924/pexels-photo-13893924.jpeg",
+        "description": "Gourmet burger with fries"
+      },
+      {
+        "category": "Products - Milanesa",
+        "url": "https://images.unsplash.com/photo-1657205937945-a7cff935d223",
+        "description": "Argentinian Milanesa plate"
+      },
+      {
+        "category": "Hero / Banner (Optional)",
+        "url": "https://images.pexels.com/photos/7258492/pexels-photo-7258492.jpeg",
+        "description": "Delivery food bag blurred background"
+      }
+    ]
+  },
+  "testing_attributes": {
+    "rule": "All interactive elements MUST have a data-testid attribute in kebab-case.",
+    "examples": [
+      "data-testid='add-to-cart-button'",
+      "data-testid='cart-floating-bar'",
+      "data-testid='category-pill-empanadas'",
+      "data-testid='admin-save-product-button'"
+    ]
+  },
+  "instructions_to_main_agent": [
+    "Build a mobile-first UI for the customer app, simulating a native app feel within a browser (max-width container, sticky headers/footers).",
+    "Use Lucide-React for all icons (e.g., ShoppingBag, Plus, Minus, Settings, Menu).",
+    "Implement the floating cart at the bottom with a high z-index and fixed positioning.",
+    "Use Shadcn UI for the admin panel (Cards, Tables, Dialogs, Forms). Disable default Shadcn Card styles if they conflict with the custom padding/radii defined here.",
+    "For customer-facing forms (like Address and Payment), use Shadcn components but style them with generous padding and large touch targets.",
+    "Ensure the WhatsApp redirect logic accurately parses the cart state and formats a clean message.",
+    "Do not use transparent headers for the customer app. Use the defined bg-white/90 backdrop-blur-xl.",
+    "Primary action colors (Red) must meet contrast ratios. The white text on #E53935 is accessible."
+  ]
+}
