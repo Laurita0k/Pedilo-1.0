@@ -1,0 +1,49 @@
+{
+  "summary": "Comprehensive backend + frontend testing of Pedilo (Lo de Juan) MVP. 23 pytest backend tests (100% pass) covering public, auth, admin CRUD, RBAC. Frontend e2e tested via Playwright: full customer ordering flow (menu → drawer → cart → checkout → WhatsApp URL build) all PASS, admin login + 4 tabs + categories CRUD + config save & persistence + product/combo lists all PASS. App is production-ready for first iteration.",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "/api/auth/login", "issue": "Returns 401 (correct) but generic 401 for any non-auth admin call without rate limiting / brute-force lockout. Spec from playbook recommends lockout after 5 fails — not implemented."},
+      {"endpoint": "DELETE /api/admin/categories/{id}", "issue": "Cascades delete to products of that category. Behaviour is intentional per code comment, but it is destructive without confirmation in the API; UI does have confirm() dialog. Document this contract clearly."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "CustomerApp header", "issues": ["Header displays 'Pedilo · Lo de Juan' + slogan + delivery badges as expected. No issues."]},
+      {"screen": "Admin Dashboard", "issues": ["Tab id is `tab-config` while the visible label is 'Negocio' — minor naming mismatch (cosmetic, not a bug). All 4 tabs functional."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pedilo_api.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional / nice-to-have) Add brute-force lockout on /api/auth/login (≥5 wrong attempts → temporary block) per auth playbook.",
+    "(Optional) Rename data-testid `tab-config` to `tab-business` to match the visible label and the test plan; not blocking.",
+    "(Optional) Surface explicit warning in admin UI that deleting a category cascades into deleting its products (currently only generic confirm)."
+  ],
+  "critical_code_review_comments": [
+    "server.py is ~580 lines but cohesive (single FastAPI module) — acceptable for MVP; consider splitting routers (auth, public, admin) once it grows past 700 lines.",
+    "JWT_SECRET correctly read from env, no hardcoded secrets.",
+    "All MongoDB queries explicitly project `{'_id': 0}` — no ObjectId leaking. Good.",
+    "Async/await used correctly across all DB calls.",
+    "CORS uses allow_origins=['*'] together with allow_credentials=True. Browsers block credentialed requests with wildcard origin. Cookie auth works here only because `allow_origin_regex='.*'` echoes the actual origin back. Functional, but for production tighten allow_origins to explicit frontend URL(s).",
+    "Cookie set with secure=true, httponly=true, samesite='none' — correct for cross-origin HTTPS preview.",
+    "Pydantic models validate all admin inputs (Create/Update). Good.",
+    "Frontend api.js correctly uses `process.env.REACT_APP_BACKEND_URL` — no hardcoded URLs.",
+    "All interactive elements have data-testid attributes — excellent testability.",
+    "WhatsApp URL build (Checkout.jsx l66-73) strips non-digits, encodes message, opens wa.me — verified working with phone 5492291570800."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pedilo_api.py (new test file, 23 tests, 100% pass)"
+  ],
+  "success_rate": {"backend": "100% (23/23)", "frontend": "100% (15/15 critical flows)"},
+  "test_credentials": "admin@pedilo.com / pedilo123 (from /app/memory/test_credentials.md) — login works, JWT cookie set, Bearer token also returned in body.",
+  "seed_data_creation": "Sample data already seeded by backend on startup: 4 categories (Pollos, Hamburguesas, Milanesas, Empanadas), 7 products, 1 combo (Combo Familiar). Seeding is idempotent (count check). Admin auto-seeded and password auto-updated if env changes. No additional seed data created during testing — all test fixtures cleaned up after each run.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend test suite at /app/backend/tests/test_pedilo_api.py is the regression baseline; run `pytest /app/backend/tests/ -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. Customer flow uses mobile viewport 390x844; admin uses 1280x1024. Admin tabs need ~2s wait after click for async data fetch (Promise.all on /admin/products + /admin/categories). WhatsApp URL is tested by intercepting window.open in browser. Admin tab id is `tab-config` (not `tab-business`).",
+  "rca of the issue": "No outstanding bugs to root-cause. Initial admin products/combos showing 0 rows during first run was a Playwright timing issue (clicked tab and immediately queried DOM before async useEffect populated the list). Fixed by adding 2.5s wait — confirmed all admin endpoints return 200 with correct data."
+}
