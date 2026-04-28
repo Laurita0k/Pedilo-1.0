@@ -1,0 +1,50 @@
+{
+  "summary": "Iteration 2 full regression + new-feature testing for Pedilo (Lo de Juan). 37/37 pytest backend tests passed (23 regression from iter 1 + 14 new covering orders, business hours, image upload/serve, product images). Playwright e2e validated: closed banner + 'Tienda cerrada' disabled checkout button when override=closed, POST /api/public/orders fires before WhatsApp window.open, admin Pedidos tab with pending badge (shows count=2), filter pills, stat cards, order rows; AdminConfig Horarios with 7 sched rows + auto/open/closed overrides saving & persisting; AdminProducts editor exposes Galería pe-gallery-file input; object-storage image upload works end-to-end (PUT /api/upload/image -> GET /api/files/{path} serves the image with Cache-Control).",
+  "backend_issues": {
+    "critical": [],
+    "minor": [
+      {"endpoint": "GET /api/admin/orders?status=<invalid>", "issue": "No validation of the ?status query param — unknown values return an empty list instead of 400. Low impact (admin-only, filter UI is a whitelisted pill set)."},
+      {"endpoint": "POST /api/upload/image", "issue": "MIME-type is trusted from the client; no server-side magic-byte check. Max-size check (5MB) is enforced. Acceptable for MVP but worth hardening later."},
+      {"endpoint": "GET /api/files/{path}", "issue": "Returns 404 if the file is not in db.files even if object exists in storage — fine, but cache-control=public,max-age=86400 means deleted-from-DB files can remain cached client-side for 24h; acceptable."}
+    ]
+  },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": [
+      {"screen": "AdminDashboard / Orders tab", "issues": ["Badge renders glued to the label ('Pedidos2') because it has no left margin/gap in the tab button flexbox. Cosmetic only."]},
+      {"screen": "AdminConfig Horarios", "issues": ["Time inputs use the browser-native <input type='time'> (shadcn time-picker is not used). Works, but inconsistent with other shadcn pickers in the app."]}
+    ]
+  },
+  "test_report_links": [
+    "/app/backend/tests/test_pedilo_api.py",
+    "/app/backend/tests/test_pedilo_v2.py",
+    "/app/test_reports/pytest/pytest_results.xml"
+  ],
+  "action_items": [
+    "(Optional) Add a small gap/margin between the Pedidos label and the pending-count badge in AdminDashboard tabs (cosmetic).",
+    "(Optional) Validate ?status query on GET /api/admin/orders against the allowed set and return 400 otherwise.",
+    "(Optional) Harden POST /api/upload/image with server-side magic-byte check (Pillow / python-magic)."
+  ],
+  "critical_code_review_comments": [
+    "server.py now ~870 lines — approaching the 700-line split threshold. Recommend extracting routers: auth, public, admin (categories/products/combos/config/orders), uploads. Still cohesive for now.",
+    "is_shop_open() correctly handles overnight windows (close < open) for fri/sat, and closed='true' short-circuit. Good.",
+    "put_object/get_object retry once on 403 by refreshing storage_key — resilient.",
+    "GET /api/files is public by design (cache-friendly image serving) and guards with db.files.find_one({is_deleted:False}) — correct.",
+    "Order creation is public & unauthenticated — expected so the customer can place orders. Input validation on items/address done; payment_method not whitelisted (any string is accepted). Low risk but worth pinning to {'efectivo','transferencia'}.",
+    "CORS still uses allow_origins=['*'] with allow_credentials=True; browsers only accept this because allow_origin_regex='.*' echoes the origin back. Functional but tighten for production.",
+    "All Mongo reads use {'_id': 0} projection — no ObjectId leaks.",
+    "Frontend /upload/image handler returns relative URL ('/api/files/...'); CustomerApp & admin consume it correctly via REACT_APP_BACKEND_URL.",
+    "Schedule field stored as Dict[str, Dict[str,str]] with 'closed' as string 'true'/'false' — works, but a boolean would be cleaner (current code already str().lower() compares)."
+  ],
+  "updated_files": [
+    "/app/backend/tests/test_pedilo_v2.py (new: 14 tests for iter 2 features, all passing)"
+  ],
+  "success_rate": {"backend": "100% (37/37)", "frontend": "100% (all iter-2 flows verified)"},
+  "test_credentials": "admin@pedilo.com / pedilo123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "No seed modifications needed. Test orders/products/categories created during tests are cleaned up via DELETE in each test's finally block. Config snapshot/restore fixture preserves Horarios + override state around each test. Final config was restored to slogan='menos vueltas, más pedidos' and open_override='auto' via API.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "context_for_next_testing_agent": "Backend regression baseline: run `pytest /app/backend/tests/ -v --junitxml=/app/test_reports/pytest/pytest_results.xml`. Two test files: test_pedilo_api.py (iter1) + test_pedilo_v2.py (iter2). Customer flow: adding first product opens an options drawer — must click 'Agregar al pedido' before the floating-cart appears. WhatsApp intercept is done by stubbing window.open = (u)=>{window.__opened=u;...}. To toggle shop closed in UI tests use AdminConfig override buttons and remember to restore to 'auto' via API (urllib/requests from the test host is 403'd by the CDN UA block — use page.evaluate(fetch) from inside the browser or run from inside the container via the test harness which is allowed). Orders stats is timezone-aware (America/Argentina/Buenos_Aires).",
+  "rca of the issue": "No outstanding bugs. One transient 403 was encountered when calling /api/public/config via python urllib from the test-host IP (CDN bot-UA block); the fix is to use requests (allowed) or page.evaluate(fetch) from within the browser — both confirmed working."
+}

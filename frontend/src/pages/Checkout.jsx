@@ -50,7 +50,7 @@ export default function Checkout() {
     return lines.join("\n");
   };
 
-  const handleSend = () => {
+  const handleSend = async () => {
     if (items.length === 0) {
       toast.error("Tu carrito está vacío");
       return;
@@ -63,11 +63,49 @@ export default function Checkout() {
       toast.error(`Pedido mínimo $${minOrder.toLocaleString("es-AR")}`);
       return;
     }
+    if (config && config.is_open === false) {
+      toast.error("La tienda está cerrada en este momento");
+      return;
+    }
     const phone = (config?.whatsapp_number || "").replace(/\D/g, "");
     if (!phone) {
       toast.error("El local aún no configuró su WhatsApp");
       return;
     }
+
+    // Persist order first (so the admin sees it even if WhatsApp is not sent)
+    const orderItems = items.map((it) => {
+      const extras = (it.selectedOptions || []).reduce((s, o) => s + (o.price_delta || 0), 0);
+      return {
+        type: it.type,
+        ref_id: it.refId,
+        name: it.name,
+        base_price: it.basePrice,
+        image: it.image || "",
+        quantity: it.quantity,
+        selected_options: (it.selectedOptions || []).map((o) => ({
+          id: o.id,
+          name: o.name,
+          price_delta: o.price_delta || 0,
+        })),
+        line_total: (it.basePrice + extras) * it.quantity,
+      };
+    });
+
+    try {
+      await api.post("/public/orders", {
+        items: orderItems,
+        total,
+        address,
+        notes,
+        payment_method: payment,
+        cash_amount: cashAmount || null,
+      });
+    } catch (e) {
+      // Non-blocking: even if persistence fails, still allow WhatsApp send
+      console.error("Order persist failed", e);
+    }
+
     const msg = encodeURIComponent(buildWhatsAppMessage());
     const url = `https://wa.me/${phone}?text=${msg}`;
     window.open(url, "_blank");
@@ -261,11 +299,11 @@ export default function Checkout() {
                 <button
                   data-testid="send-whatsapp"
                   onClick={handleSend}
-                  disabled={!meetsMin || !address.trim()}
+                  disabled={!meetsMin || !address.trim() || (config && config.is_open === false)}
                   className="w-full h-14 rounded-full bg-[#25D366] text-white font-heading font-bold flex items-center justify-center gap-2 shadow-lg shadow-green-500/30 active:scale-[0.98] transition-transform disabled:opacity-50 disabled:cursor-not-allowed"
                 >
                   <MessageCircle size={20} strokeWidth={2.4} />
-                  Enviar pedido por WhatsApp
+                  {config && config.is_open === false ? "Tienda cerrada" : "Enviar pedido por WhatsApp"}
                 </button>
               </div>
             </div>

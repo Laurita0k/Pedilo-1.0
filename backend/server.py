@@ -7,12 +7,16 @@ load_dotenv(ROOT_DIR / '.env')
 import os
 import uuid
 import logging
-from datetime import datetime, timezone, timedelta
-from typing import List, Optional
+import io
+from datetime import datetime, timezone, timedelta, time as dtime
+from typing import List, Optional, Dict
+from zoneinfo import ZoneInfo
 
+import requests
 import bcrypt
 import jwt
-from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends
+from fastapi import FastAPI, APIRouter, HTTPException, Request, Response, Depends, UploadFile, File
+from fastapi.responses import StreamingResponse
 from starlette.middleware.cors import CORSMiddleware
 from motor.motor_asyncio import AsyncIOMotorClient
 from pydantic import BaseModel, Field, EmailStr
@@ -29,6 +33,81 @@ JWT_ALGORITHM = "HS256"
 
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
 logger = logging.getLogger(__name__)
+
+
+# -------------------- Object Storage --------------------
+STORAGE_URL = "https://integrations.emergentagent.com/objstore/api/v1/storage"
+EMERGENT_KEY = os.environ.get("EMERGENT_LLM_KEY", "")
+APP_NAME = os.environ.get("APP_NAME", "pedilo")
+_storage_key: Optional[str] = None
+
+
+def init_storage() -> Optional[str]:
+    global _storage_key
+    if _storage_key:
+        return _storage_key
+    if not EMERGENT_KEY:
+        logger.warning("EMERGENT_LLM_KEY not set; object storage disabled")
+        return None
+    try:
+        r = requests.post(
+            f"{STORAGE_URL}/init", json={"emergent_key": EMERGENT_KEY}, timeout=30
+        )
+        r.raise_for_status()
+        _storage_key = r.json().get("storage_key")
+        return _storage_key
+    except Exception as e:
+        logger.error(f"Storage init failed: {e}")
+        return None
+
+
+def put_object(path: str, data: bytes, content_type: str) -> dict:
+    key = init_storage()
+    if not key:
+        raise HTTPException(status_code=503, detail="Storage no disponible")
+    r = requests.put(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key, "Content-Type": content_type},
+        data=data,
+        timeout=120,
+    )
+    if r.status_code == 403:
+        # refresh key once
+        global _storage_key
+        _storage_key = None
+        key = init_storage()
+        r = requests.put(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key, "Content-Type": content_type},
+            data=data,
+            timeout=120,
+        )
+    r.raise_for_status()
+    return r.json()
+
+
+def get_object(path: str):
+    key = init_storage()
+    if not key:
+        raise HTTPException(status_code=503, detail="Storage no disponible")
+    r = requests.get(
+        f"{STORAGE_URL}/objects/{path}",
+        headers={"X-Storage-Key": key},
+        timeout=60,
+    )
+    if r.status_code == 403:
+        global _storage_key
+        _storage_key = None
+        key = init_storage()
+        r = requests.get(
+            f"{STORAGE_URL}/objects/{path}",
+            headers={"X-Storage-Key": key},
+            timeout=60,
+        )
+    if r.status_code == 404:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    r.raise_for_status()
+    return r.content, r.headers.get("Content-Type", "application/octet-stream")
 
 
 # -------------------- Auth Helpers --------------------
@@ -111,7 +190,8 @@ class Product(BaseModel):
     name: str
     description: str = ""
     price: float
-    image: str = ""
+    image: str = ""  # primary / backward-compat
+    images: List[str] = []
     category_id: str
     options: List[ProductOption] = []
     active: bool = True
@@ -124,6 +204,7 @@ class ProductCreate(BaseModel):
     description: str = ""
     price: float
     image: str = ""
+    images: List[str] = []
     category_id: str
     options: List[ProductOption] = []
     active: bool = True
@@ -135,6 +216,7 @@ class ProductUpdate(BaseModel):
     description: Optional[str] = None
     price: Optional[float] = None
     image: Optional[str] = None
+    images: Optional[List[str]] = None
     category_id: Optional[str] = None
     options: Optional[List[ProductOption]] = None
     active: Optional[bool] = None
@@ -190,6 +272,104 @@ class BusinessConfig(BaseModel):
     delivery_time: str = "30-45 min"
     min_order: float = 0.0
     whatsapp_number: str = ""
+    schedule: Dict[str, Dict[str, str]] = Field(
+        default_factory=lambda: {
+            "mon": {"open": "19:00", "close": "23:30", "closed": "false"},
+            "tue": {"open": "19:00", "close": "23:30", "closed": "false"},
+            "wed": {"open": "19:00", "close": "23:30", "closed": "false"},
+            "thu": {"open": "19:00", "close": "23:30", "closed": "false"},
+            "fri": {"open": "19:00", "close": "00:30", "closed": "false"},
+            "sat": {"open": "12:00", "close": "00:30", "closed": "false"},
+            "sun": {"open": "12:00", "close": "23:30", "closed": "false"},
+        }
+    )
+    # "auto" | "open" | "closed"
+    open_override: str = "auto"
+    timezone: str = "America/Argentina/Buenos_Aires"
+
+
+# -------------------- Orders --------------------
+class OrderOption(BaseModel):
+    id: str
+    name: str
+    price_delta: float = 0.0
+
+
+class OrderItem(BaseModel):
+    type: str  # "product" | "combo"
+    ref_id: str
+    name: str
+    base_price: float
+    image: str = ""
+    quantity: int
+    selected_options: List[OrderOption] = []
+    line_total: float
+
+
+class OrderCreate(BaseModel):
+    items: List[OrderItem]
+    total: float
+    address: str
+    notes: str = ""
+    payment_method: str = "efectivo"  # "efectivo" | "transferencia"
+    cash_amount: Optional[str] = None
+    customer_name: Optional[str] = None
+
+
+class Order(BaseModel):
+    id: str = Field(default_factory=lambda: str(uuid.uuid4()))
+    items: List[OrderItem]
+    total: float
+    address: str
+    notes: str = ""
+    payment_method: str = "efectivo"
+    cash_amount: Optional[str] = None
+    customer_name: Optional[str] = None
+    status: str = "pending"  # pending | confirmed | delivered | cancelled
+    created_at: datetime = Field(default_factory=lambda: datetime.now(timezone.utc))
+
+
+class OrderStatusUpdate(BaseModel):
+    status: str
+
+
+# -------------------- Open/Closed helper --------------------
+_DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"]
+
+
+def _parse_hhmm(s: str) -> Optional[dtime]:
+    try:
+        h, m = s.strip().split(":")
+        return dtime(int(h), int(m))
+    except Exception:
+        return None
+
+
+def is_shop_open(cfg: dict) -> bool:
+    override = cfg.get("open_override", "auto")
+    if override == "open":
+        return True
+    if override == "closed":
+        return False
+    tz_name = cfg.get("timezone") or "America/Argentina/Buenos_Aires"
+    try:
+        now = datetime.now(ZoneInfo(tz_name))
+    except Exception:
+        now = datetime.now(timezone.utc)
+    schedule = cfg.get("schedule") or {}
+    today_key = _DAY_KEYS[now.weekday()]
+    day = schedule.get(today_key) or {}
+    if str(day.get("closed", "false")).lower() == "true":
+        return False
+    open_t = _parse_hhmm(day.get("open", ""))
+    close_t = _parse_hhmm(day.get("close", ""))
+    if not open_t or not close_t:
+        return False
+    now_t = now.time()
+    if close_t > open_t:
+        return open_t <= now_t <= close_t
+    # overnight (e.g., 19:00 - 00:30) — open if after open_t OR before close_t
+    return now_t >= open_t or now_t <= close_t
 
 
 # -------------------- Auth Routes --------------------
@@ -227,9 +407,16 @@ async def me(user: dict = Depends(get_current_user)):
 # -------------------- Public Routes --------------------
 @api_router.get("/public/config")
 async def public_config():
-    cfg = await db.config.find_one({"_id": "business"}, {"_id": 0})
-    if not cfg:
-        cfg = BusinessConfig().model_dump()
+    stored = await db.config.find_one({"_id": "business"}, {"_id": 0}) or {}
+    defaults = BusinessConfig().model_dump()
+    cfg = {**defaults, **stored}
+    if not cfg.get("schedule"):
+        cfg["schedule"] = defaults["schedule"]
+    if not cfg.get("open_override"):
+        cfg["open_override"] = "auto"
+    if not cfg.get("timezone"):
+        cfg["timezone"] = defaults["timezone"]
+    cfg["is_open"] = is_shop_open(cfg)
     return cfg
 
 
@@ -373,6 +560,111 @@ async def admin_delete_combo(combo_id: str, user: dict = Depends(get_current_use
     if res.deleted_count == 0:
         raise HTTPException(status_code=404, detail="Combo no encontrado")
     return {"success": True}
+
+
+# -------------------- Uploads & file serving --------------------
+MIME_BY_EXT = {
+    "jpg": "image/jpeg", "jpeg": "image/jpeg", "png": "image/png",
+    "gif": "image/gif", "webp": "image/webp", "svg": "image/svg+xml",
+}
+
+
+@api_router.post("/upload/image")
+async def upload_image(file: UploadFile = File(...), user: dict = Depends(get_current_user)):
+    ext = (file.filename or "").rsplit(".", 1)[-1].lower() if "." in (file.filename or "") else "bin"
+    content_type = file.content_type or MIME_BY_EXT.get(ext, "application/octet-stream")
+    data = await file.read()
+    if len(data) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="Imagen máx 5MB")
+    path = f"{APP_NAME}/images/{uuid.uuid4()}.{ext}"
+    result = put_object(path, data, content_type)
+    stored_path = result.get("path") or path
+    await db.files.insert_one({
+        "id": str(uuid.uuid4()),
+        "storage_path": stored_path,
+        "original_filename": file.filename,
+        "content_type": content_type,
+        "size": result.get("size", len(data)),
+        "is_deleted": False,
+        "created_at": datetime.now(timezone.utc).isoformat(),
+    })
+    return {"url": f"/api/files/{stored_path}", "path": stored_path}
+
+
+@api_router.get("/files/{path:path}")
+async def serve_file(path: str):
+    record = await db.files.find_one({"storage_path": path, "is_deleted": False}, {"_id": 0})
+    if not record:
+        raise HTTPException(status_code=404, detail="Archivo no encontrado")
+    data, content_type = get_object(path)
+    return StreamingResponse(
+        io.BytesIO(data),
+        media_type=record.get("content_type") or content_type,
+        headers={"Cache-Control": "public, max-age=86400"},
+    )
+
+
+# -------------------- Orders --------------------
+@api_router.post("/public/orders")
+async def create_order(body: OrderCreate):
+    if not body.items:
+        raise HTTPException(status_code=400, detail="Carrito vacío")
+    if not body.address.strip():
+        raise HTTPException(status_code=400, detail="Dirección requerida")
+    order = Order(**body.model_dump())
+    doc = order.model_dump()
+    doc["created_at"] = doc["created_at"].isoformat()
+    await db.orders.insert_one(doc)
+    doc.pop("_id", None)
+    return doc
+
+
+@api_router.get("/admin/orders")
+async def admin_list_orders(user: dict = Depends(get_current_user), status: Optional[str] = None):
+    q = {}
+    if status:
+        q["status"] = status
+    items = await db.orders.find(q, {"_id": 0}).sort("created_at", -1).to_list(1000)
+    return items
+
+
+@api_router.put("/admin/orders/{order_id}")
+async def admin_update_order(order_id: str, body: OrderStatusUpdate, user: dict = Depends(get_current_user)):
+    if body.status not in {"pending", "confirmed", "delivered", "cancelled"}:
+        raise HTTPException(status_code=400, detail="Estado inválido")
+    res = await db.orders.update_one({"id": order_id}, {"$set": {"status": body.status}})
+    if res.matched_count == 0:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    order = await db.orders.find_one({"id": order_id}, {"_id": 0})
+    return order
+
+
+@api_router.delete("/admin/orders/{order_id}")
+async def admin_delete_order(order_id: str, user: dict = Depends(get_current_user)):
+    res = await db.orders.delete_one({"id": order_id})
+    if res.deleted_count == 0:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+    return {"success": True}
+
+
+@api_router.get("/admin/orders/stats")
+async def admin_order_stats(user: dict = Depends(get_current_user)):
+    tz = ZoneInfo("America/Argentina/Buenos_Aires")
+    today = datetime.now(tz).date()
+    start = datetime.combine(today, dtime.min).replace(tzinfo=tz).astimezone(timezone.utc).isoformat()
+    pipeline = [
+        {"$match": {"created_at": {"$gte": start}, "status": {"$ne": "cancelled"}}},
+        {"$group": {"_id": None, "count": {"$sum": 1}, "total": {"$sum": "$total"}}},
+    ]
+    agg = await db.orders.aggregate(pipeline).to_list(1)
+    today_data = agg[0] if agg else {"count": 0, "total": 0}
+    pending = await db.orders.count_documents({"status": "pending"})
+    return {
+        "today_count": today_data.get("count", 0),
+        "today_total": today_data.get("total", 0),
+        "pending": pending,
+    }
+
 
 
 # -------------------- Seed --------------------
@@ -550,6 +842,14 @@ async def startup():
     await db.categories.create_index("id", unique=True)
     await db.products.create_index("id", unique=True)
     await db.combos.create_index("id", unique=True)
+    await db.orders.create_index("id", unique=True)
+    await db.orders.create_index([("created_at", -1)])
+    await db.files.create_index("storage_path")
+    try:
+        init_storage()
+        logger.info("Object storage initialized")
+    except Exception as e:
+        logger.warning(f"Storage init skipped: {e}")
     await seed_admin()
     await seed_config()
     await seed_sample_data()

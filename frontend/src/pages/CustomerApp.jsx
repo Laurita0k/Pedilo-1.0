@@ -6,6 +6,33 @@ import { MapPin, Clock, ShoppingBag, Plus, Settings } from "lucide-react";
 import CustomizationDrawer from "../components/CustomizationDrawer";
 import FloatingCart from "../components/FloatingCart";
 
+const DAY_KEYS = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
+const DAY_LABELS = {
+  mon: "lunes",
+  tue: "martes",
+  wed: "miércoles",
+  thu: "jueves",
+  fri: "viernes",
+  sat: "sábado",
+  sun: "domingo",
+};
+
+function nextOpenHint(config) {
+  if (!config?.schedule) return "";
+  const now = new Date();
+  for (let i = 0; i < 7; i++) {
+    const idx = (now.getDay() + 6 + i) % 7; // JS: 0=Sun; our keys start at Mon
+    const key = DAY_KEYS[idx];
+    const d = config.schedule[key];
+    if (!d || String(d.closed).toLowerCase() === "true" || !d.open) continue;
+    if (i === 0) return `Abre hoy ${d.open}`;
+    if (i === 1) return `Abre mañana ${d.open}`;
+    return `Abre ${DAY_LABELS[key]} ${d.open}`;
+  }
+  return "";
+}
+
+
 export default function CustomerApp() {
   const navigate = useNavigate();
   const { addItem, count } = useCart();
@@ -115,6 +142,18 @@ export default function CustomerApp() {
                   {config.delivery_zone || "Envíos en zona"}
                 </span>
               </div>
+            </div>
+          )}
+
+          {config && config.is_open === false && (
+            <div
+              data-testid="closed-banner"
+              className="mt-3 px-3 py-2 rounded-xl bg-red-50 border border-red-100 text-red-700 text-xs font-semibold flex items-center gap-2"
+            >
+              <span className="h-2 w-2 rounded-full bg-red-500" />
+              <span>
+                Cerrado ahora · {nextOpenHint(config) || "Probá más tarde"}
+              </span>
             </div>
           )}
         </header>

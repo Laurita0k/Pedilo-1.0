@@ -55,6 +55,23 @@ export default function CustomizationDrawer({ type, item, onClose, onConfirm }) 
         </div>
 
         <div className="flex-1 overflow-y-auto px-6 py-4">
+          {(item.image || item.images?.length > 0) && (
+            <div className="mb-4 -mx-6 px-6">
+              <div className="flex gap-2 overflow-x-auto no-scrollbar">
+                {[item.image, ...(item.images || [])]
+                  .filter(Boolean)
+                  .filter((v, i, a) => a.indexOf(v) === i)
+                  .map((src, i) => (
+                    <img
+                      key={i}
+                      src={src}
+                      alt=""
+                      className="h-36 w-44 rounded-xl object-cover flex-shrink-0 border border-gray-100"
+                    />
+                  ))}
+              </div>
+            </div>
+          )}
           {item.options?.length > 0 ? (
             <>
               <p className="text-xs uppercase tracking-widest text-gray-400 font-bold mb-2">

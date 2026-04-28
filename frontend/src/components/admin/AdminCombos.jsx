@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../../lib/api";
+import { uploadImage } from "../../lib/upload";
 import { Plus, Trash2, Pencil, X, Power, Save } from "lucide-react";
 
 const EMPTY = {
@@ -173,12 +174,18 @@ export default function AdminCombos() {
 }
 
 function ComboEditor({ value, onChange, onClose, onSave, products }) {
-  const handleImage = (e) => {
+  const [uploading, setUploading] = useState(false);
+  const handleImage = async (e) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => onChange({ ...value, image: ev.target.result });
-    reader.readAsDataURL(file);
+    setUploading(true);
+    try {
+      const url = await uploadImage(file);
+      onChange({ ...value, image: url });
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
   };
 
   const addItem = () => {
@@ -258,11 +265,11 @@ function ComboEditor({ value, onChange, onClose, onSave, products }) {
               <input
                 className="input flex-1"
                 placeholder="https://…"
-                value={value.image?.startsWith("data:") ? "" : value.image}
+                value={value.image?.startsWith("data:") || value.image?.includes("/api/files/") ? "" : value.image}
                 onChange={(e) => onChange({ ...value, image: e.target.value })}
               />
               <label className="h-[42px] px-3 rounded-lg border border-gray-200 text-sm font-bold flex items-center cursor-pointer hover:bg-gray-50">
-                Subir
+                {uploading ? "Subiendo…" : "Subir"}
                 <input type="file" accept="image/*" className="hidden" onChange={handleImage} />
               </label>
             </div>

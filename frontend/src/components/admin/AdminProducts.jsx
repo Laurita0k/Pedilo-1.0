@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
 import api, { formatApiErrorDetail } from "../../lib/api";
+import { uploadImage } from "../../lib/upload";
 import { Plus, Trash2, Pencil, X, Power, Save } from "lucide-react";
 
 const EMPTY_PRODUCT = {
@@ -8,6 +9,7 @@ const EMPTY_PRODUCT = {
   description: "",
   price: 0,
   image: "",
+  images: [],
   category_id: "",
   options: [],
   active: true,
@@ -173,12 +175,27 @@ export default function AdminProducts() {
 }
 
 function ProductEditor({ value, onChange, onClose, onSave, cats }) {
-  const handleImage = (e) => {
+  const [uploading, setUploading] = useState(false);
+
+  const handleImage = async (e, isGallery = false) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => onChange({ ...value, image: ev.target.result });
-    reader.readAsDataURL(file);
+    setUploading(true);
+    try {
+      const url = await uploadImage(file);
+      if (isGallery) {
+        onChange({ ...value, images: [...(value.images || []), url] });
+      } else {
+        onChange({ ...value, image: url });
+      }
+    } finally {
+      setUploading(false);
+      e.target.value = "";
+    }
+  };
+
+  const removeGalleryImg = (idx) => {
+    onChange({ ...value, images: value.images.filter((_, i) => i !== idx) });
   };
 
   const addOpt = () =>
@@ -259,23 +276,23 @@ function ProductEditor({ value, onChange, onClose, onSave, cats }) {
               onChange={(e) => onChange({ ...value, description: e.target.value })}
             />
           </Field>
-          <Field label="Imagen (URL o subir)" className="md:col-span-2">
+          <Field label="Imagen principal (URL o subir)" className="md:col-span-2">
             <div className="flex gap-2">
               <input
                 data-testid="pe-image-url"
                 className="input flex-1"
                 placeholder="https://…"
-                value={value.image?.startsWith("data:") ? "" : value.image}
+                value={value.image?.startsWith("data:") || value.image?.includes("/api/files/") ? "" : value.image}
                 onChange={(e) => onChange({ ...value, image: e.target.value })}
               />
               <label className="h-[42px] px-3 rounded-lg border border-gray-200 text-sm font-bold flex items-center cursor-pointer hover:bg-gray-50">
-                Subir
+                {uploading ? "Subiendo…" : "Subir"}
                 <input
                   data-testid="pe-image-file"
                   type="file"
                   accept="image/*"
                   className="hidden"
-                  onChange={handleImage}
+                  onChange={(e) => handleImage(e, false)}
                 />
               </label>
             </div>
@@ -286,6 +303,40 @@ function ProductEditor({ value, onChange, onClose, onSave, cats }) {
                 className="mt-2 h-24 w-24 rounded-lg object-cover border border-gray-200"
               />
             )}
+          </Field>
+          <Field label="Galería (imágenes adicionales)" className="md:col-span-2">
+            <div className="flex flex-wrap gap-2 items-start">
+              {(value.images || []).map((url, i) => (
+                <div key={i} className="relative group">
+                  <img
+                    src={url}
+                    alt=""
+                    className="h-20 w-20 rounded-lg object-cover border border-gray-200"
+                  />
+                  <button
+                    type="button"
+                    onClick={() => removeGalleryImg(i)}
+                    className="absolute -top-2 -right-2 h-6 w-6 rounded-full bg-red-500 text-white text-xs font-bold shadow-md opacity-0 group-hover:opacity-100 transition"
+                    data-testid={`gallery-remove-${i}`}
+                  >
+                    ×
+                  </button>
+                </div>
+              ))}
+              <label className="h-20 w-20 rounded-lg border-2 border-dashed border-gray-300 flex items-center justify-center cursor-pointer text-gray-400 hover:border-primary hover:text-primary text-sm font-bold">
+                {uploading ? "…" : "+"}
+                <input
+                  data-testid="pe-gallery-file"
+                  type="file"
+                  accept="image/*"
+                  className="hidden"
+                  onChange={(e) => handleImage(e, true)}
+                />
+              </label>
+            </div>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Opcional. La imagen principal va arriba; la galería se muestra al ver el detalle.
+            </p>
           </Field>
           <div className="md:col-span-2">
             <div className="flex items-center justify-between mb-2">
