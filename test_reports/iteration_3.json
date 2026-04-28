@@ -1,0 +1,40 @@
+{
+  "summary": "Iteration 3 (frontend notifications for Pedilo admin panel) — COMPLETE PASS. Verified all 9 acceptance criteria via Playwright with an AudioContext monkey-patch that counts oscillator creations to detect chime firing without relying on audible output.",
+  "test_scope": "Frontend only (per review_request). Backend unchanged from iteration 2, not re-tested.",
+  "tests_executed": [
+    {"id": "A", "name": "toggle-sound button initially shows 'Activar sonido' (OFF)", "result": "PASS"},
+    {"id": "B", "name": "Click toggle ON: text='Sonido ON', localStorage['pedilo_sound_enabled']='1', AudioContext constructed (ctxCount=1), preview chime plays (2 oscillators), Notification permission requested", "result": "PASS"},
+    {"id": "C", "name": "Preference persists across full page reload (localStorage='1', text='Sonido ON')", "result": "PASS"},
+    {"id": "D", "name": "No chime fires on first mount even when pending orders already exist (false-positive prevention via firstLoadRef)", "result": "PASS — oscCount=0 after initial stats call despite badge=2"},
+    {"id": "D2","name": "document.title updates to '(N) Pedilo · Admin' when pending>0", "result": "PASS — title='(2) Pedilo · Admin'"},
+    {"id": "E", "name": "New order via POST /api/public/orders triggers: chime (oscillator created), success toast '🔔 ¡Nuevo pedido!', badge increment 2→3, title update (2)→(3) Pedilo · Admin within ~20s poll window", "result": "PASS"},
+    {"id": "F", "name": "Click toggle again: text='Activar sonido', localStorage='0'", "result": "PASS"},
+    {"id": "G", "name": "With sound OFF: new order causes NO chime and NO toast, but badge still silently increments (3→4) and title still updates", "result": "PASS — oscillator count unchanged"},
+    {"id": "H", "name": "Regression: admin tabs (config, categories, products, combos, orders) remain clickable", "result": "PASS"},
+    {"id": "I", "name": "document.title resets to 'Pedilo · Admin' when pending=0 (after deleting all pending orders)", "result": "PASS"}
+  ],
+  "backend_issues": { "critical": [], "minor": [] },
+  "frontend_issues": {
+    "ui_bugs": [],
+    "integration_issues": [],
+    "design_issues": []
+  },
+  "code_review_comments": [
+    "Clean, focused implementation. AdminDashboard.jsx (~195 lines) and notify.js (~89 lines) are well-sized.",
+    "Good use of refs (prevPendingRef, firstLoadRef) to prevent false-positive chime on initial mount.",
+    "AudioContext is lazily created & resumed correctly — respects browsers' user-gesture autoplay policy (primeAudio on first click).",
+    "Desktop notifications correctly skipped when document.visibilityState === 'visible' (good UX — toast alone is enough when tab is focused).",
+    "Minor suggestion (not a bug): the `showDesktopNotification` call uses tag 'pedilo-new-order' with renotify — if many orders come in while tab is hidden, only the latest is shown; this is acceptable but the delta count is still accurate.",
+    "Minor suggestion: consider capping polling frequency or adding a back-off if /admin/orders/stats repeatedly fails to avoid log-spam on network issues (currently catches silently, which is fine)."
+  ],
+  "test_report_links": [],
+  "updated_files": [],
+  "success_rate": { "backend": "N/A (not in scope)", "frontend": "100% (10/10 assertions passed)" },
+  "test_credentials": "admin@pedilo.com / pedilo123 (from /app/memory/test_credentials.md)",
+  "seed_data_creation": "Created 2 test orders via POST /api/public/orders during polling tests. ALL test orders (including 2 leftover from earlier runs) were cleaned up via DELETE /api/admin/orders/{id} at end of test; pending count verified back to 0.",
+  "retest_needed": false,
+  "main_agent_can_self_test": true,
+  "action_items": [],
+  "context_for_next_testing_agent": "Iteration 3 notifications are fully verified. Key technique: use page.add_init_script BEFORE navigation to wrap window.AudioContext and count createOscillator calls — this detects chime reliably without audio playback. playNewOrderChime creates 2 oscillators per call (A5 + D6). Remember to call page.goto AFTER add_init_script since the automation tool auto-navigates first.",
+  "artifacts": ["/app/test_reports/iter3_chime_fired.png (shows toast '🔔 ¡Nuevo pedido!' + badge=3 + Sonido ON state)"]
+}

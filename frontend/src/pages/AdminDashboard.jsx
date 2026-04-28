@@ -1,13 +1,21 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "react-router-dom";
+import { toast } from "sonner";
 import { useAuth } from "../contexts/AuthContext";
-import { Store, FolderTree, Package, PackageOpen, LogOut, ExternalLink, Receipt } from "lucide-react";
+import { Store, FolderTree, Package, PackageOpen, LogOut, ExternalLink, Receipt, Bell, BellOff } from "lucide-react";
 import api from "../lib/api";
 import AdminConfig from "../components/admin/AdminConfig";
 import AdminCategories from "../components/admin/AdminCategories";
 import AdminProducts from "../components/admin/AdminProducts";
 import AdminCombos from "../components/admin/AdminCombos";
 import AdminOrders from "../components/admin/AdminOrders";
+import {
+  primeAudio,
+  playNewOrderChime,
+  vibrate,
+  ensureNotificationPermission,
+  showDesktopNotification,
+} from "../lib/notify";
 
 const TABS = [
   { id: "orders", label: "Pedidos", icon: Receipt },
@@ -17,9 +25,17 @@ const TABS = [
   { id: "combos", label: "Combos", icon: PackageOpen },
 ];
 
+const BASE_TITLE = "Pedilo · Admin";
+const SOUND_KEY = "pedilo_sound_enabled";
+
 export default function AdminDashboard() {
   const [tab, setTab] = useState("orders");
   const [pending, setPending] = useState(0);
+  const [soundOn, setSoundOn] = useState(
+    () => localStorage.getItem(SOUND_KEY) === "1"
+  );
+  const prevPendingRef = useRef(null);
+  const firstLoadRef = useRef(true);
   const { user, logout } = useAuth();
   const navigate = useNavigate();
 
@@ -27,15 +43,58 @@ export default function AdminDashboard() {
     const load = async () => {
       try {
         const { data } = await api.get("/admin/orders/stats");
-        setPending(data.pending || 0);
+        const newPending = data.pending || 0;
+        const prev = prevPendingRef.current;
+
+        // Fire chime only on subsequent polls, not on the first load
+        if (!firstLoadRef.current && prev !== null && newPending > prev && soundOn) {
+          const delta = newPending - prev;
+          playNewOrderChime();
+          vibrate([250, 100, 250]);
+          showDesktopNotification(
+            delta === 1 ? "Nuevo pedido en Pedilo" : `${delta} pedidos nuevos`,
+            "Tocá para ver los detalles en el panel."
+          );
+          toast.success(
+            delta === 1 ? "🔔 ¡Nuevo pedido!" : `🔔 ${delta} pedidos nuevos`,
+            { duration: 6000 }
+          );
+        }
+
+        prevPendingRef.current = newPending;
+        firstLoadRef.current = false;
+        setPending(newPending);
       } catch {
         /* noop */
       }
     };
     load();
-    const i = setInterval(load, 20000);
+    const i = setInterval(load, 15000);
     return () => clearInterval(i);
-  }, []);
+  }, [soundOn]);
+
+  // Dynamic tab title: "(2) Pedilo · Admin"
+  useEffect(() => {
+    document.title = pending > 0 ? `(${pending}) ${BASE_TITLE}` : BASE_TITLE;
+    return () => {
+      document.title = BASE_TITLE;
+    };
+  }, [pending]);
+
+  const toggleSound = async () => {
+    if (!soundOn) {
+      primeAudio();
+      playNewOrderChime(); // short preview so the user hears it worked
+      await ensureNotificationPermission();
+      localStorage.setItem(SOUND_KEY, "1");
+      setSoundOn(true);
+      toast.success("Notificaciones activadas");
+    } else {
+      localStorage.setItem(SOUND_KEY, "0");
+      setSoundOn(false);
+      toast("Notificaciones desactivadas");
+    }
+  };
 
   const handleLogout = async () => {
     await logout();
@@ -60,6 +119,21 @@ export default function AdminDashboard() {
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button
+              data-testid="toggle-sound"
+              onClick={toggleSound}
+              title={soundOn ? "Sonido activado" : "Activar sonido de pedidos"}
+              className={`h-9 px-3 rounded-lg text-xs font-bold flex items-center gap-1 border transition-all ${
+                soundOn
+                  ? "bg-primary/10 border-primary/30 text-primary"
+                  : "bg-white border-gray-200 text-gray-600 hover:bg-gray-50"
+              }`}
+            >
+              {soundOn ? <Bell size={14} /> : <BellOff size={14} />}
+              <span className="hidden sm:inline">
+                {soundOn ? "Sonido ON" : "Activar sonido"}
+              </span>
+            </button>
             <button
               data-testid="preview-shop"
               onClick={() => navigate("/")}
