@@ -98,7 +98,7 @@ export default function AdminDashboard() {
                   <Icon size={16} />
                   {t.label}
                   {showBadge && (
-                    <span className="h-5 min-w-[20px] px-1.5 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center">
+                    <span className="ml-1 h-5 min-w-[20px] px-1.5 rounded-full bg-amber-500 text-white text-[10px] font-extrabold flex items-center justify-center">
                       {pending}
                     </span>
                   )}
